@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>あなたの欲を円グラフにするメーカー</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #fffdf8;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 0.5em;
+    }
+    .slider-container {
+      max-width: 500px;
+      margin: auto;
+      text-align: left;
+    }
+    .slider-block {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .slider-block input[type="range"] {
+      flex: 1;
+    }
+    canvas {
+      max-width: 600px;
+      margin-top: 30px;
+    }
+    button {
+      margin: 5px;
+      padding: 6px 10px;
+      font-size: 14px;
+    }
+    input[type="text"] {
+      padding: 5px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>あなたの欲円グラフメーカー</h1>
+
+  <div>
+    👤 名前：<input type="text" id="userName" placeholder="名前を入力（任意）">
+  </div>
+
+  <form id="addForm" onsubmit="addDesire(event)">
+    <input type="text" id="desireName" placeholder="欲の名前（例：ゲーム欲）" required>
+    <button type="submit">➕ 欲を追加</button>
+  </form>
+
+  <div id="sliders" class="slider-container"></div>
+
+  <div>
+    <button onclick="resetDesires()">🔄 初期化</button>
+    <button onclick="saveChartImage()">💾 画像保存</button>
+  </div>
+
+  <canvas id="yokuChart"></canvas>
+
+  <script>
+    let defaultDesires = [
+      { name: "食欲", value: 20 },
+      { name: "睡眠欲", value: 20 },
+      { name: "物欲", value: 20 },
+      { name: "承認欲求", value: 20 },
+      { name: "愛されたい欲", value: 20 }
+    ];
+    let desires = JSON.parse(JSON.stringify(defaultDesires));
+
+    const ctx = document.getElementById("yokuChart").getContext("2d");
+    const chart = new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels: desires.map(d => d.name),
+        datasets: [{
+          data: desires.map(d => d.value),
+          backgroundColor: [
+            "#ff6384", "#36a2eb", "#ffce56", "#4bc0c0", "#9966ff", "#ff9f40", "#c9cbcf"
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          datalabels: {
+            color: '#000',
+            font: {
+              weight: 'bold',
+              size: 14
+            },
+            formatter: (value, context) => context.chart.data.labels[context.dataIndex]
+          },
+          title: {
+            display: true,
+            text: "",
+            font: { size: 18 }
+          },
+          legend: {
+            position: 'bottom'
+          }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+
+    function renderSliders() {
+      const container = document.getElementById("sliders");
+      container.innerHTML = "";
+      desires.forEach((desire, index) => {
+        const block = document.createElement("div");
+        block.className = "slider-block";
+
+        const label = document.createElement("label");
+        label.textContent = `${desire.name}: ${desire.value.toFixed(1)}%`;
+
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = 0;
+        slider.max = 100;
+        slider.step = 0.1;
+        slider.value = desire.value;
+        slider.oninput = e => updateDesire(index, parseFloat(e.target.value));
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "🗑️";
+        delBtn.onclick = () => { removeDesire(index); };
+
+        block.appendChild(label);
+        block.appendChild(slider);
+        block.appendChild(delBtn);
+
+        container.appendChild(block);
+      });
+    }
+
+    function updateDesire(index, newValue) {
+      const totalOther = desires.reduce((sum, d, i) => i !== index ? sum + d.value : sum, 0);
+      const remaining = 100 - newValue;
+      const others = desires.map((d, i) => i !== index ? d : null).filter(Boolean);
+      const sumOthers = others.reduce((sum, d) => sum + d.value, 0);
+
+      others.forEach(d => {
+        d.value = sumOthers > 0 ? d.value * (remaining / sumOthers) : remaining / others.length;
+      });
+
+      desires[index].value = newValue;
+      renderSliders();
+      updateChart();
+    }
+
+    function updateChart() {
+      chart.data.labels = desires.map(d => d.name);
+      chart.data.datasets[0].data = desires.map(d => d.value);
+
+      const userName = document.getElementById("userName").value.trim();
+      chart.options.plugins.title.text = userName ? `${userName}さんの欲グラフ` : "あなたの欲";
+
+      chart.update();
+    }
+
+    function addDesire(e) {
+      e.preventDefault();
+      const input = document.getElementById("desireName");
+      const name = input.value.trim();
+      if (!name) return;
+      desires.push({ name, value: 0 });
+      input.value = "";
+      renderSliders();
+      updateChart();
+    }
+
+    function removeDesire(index) {
+      desires.splice(index, 1);
+      renderSliders();
+      updateChart();
+    }
+
+    function resetDesires() {
+      desires = JSON.parse(JSON.stringify(defaultDesires));
+      document.getElementById("userName").value = "";
+      renderSliders();
+      updateChart();
+    }
+
+    function saveChartImage() {
+      const link = document.createElement("a");
+      link.href = chart.toBase64Image("image/png");
+      const name = document.getElementById("userName").value || "欲グラフ";
+      link.download = `${name}.png`;
+      link.click();
+    }
+
+    // 初期描画
+    renderSliders();
+    updateChart();
+  </script>
+</body>
+</html>
